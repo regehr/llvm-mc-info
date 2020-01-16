@@ -15,57 +15,13 @@ using namespace llvm;
 
 namespace {
 
-const int W = 8;
+void getInfo(Module *M) {
+}
+
+const int W = 32;
 
 LLVMContext C;
 IRBuilder<> B(C);
-
-Value *maskKnown(const KnownBits &K, Value *V) {
-  auto O = B.CreateOr(V, K.One);
-  auto A = B.CreateAnd(O, ~K.Zero);
-  return A;
-}
-
-
-// slow, not clever, but obviously correct
-bool nextKB1(KnownBits &K) {
-  do {
-    K.Zero += 1;
-    if (K.Zero == 0) {
-      K.One += 1;
-      if (K.One == 0)
-        return false;
-    }
-  } while (K.hasConflict());
-  return true;
-}
-
-// fast, clever, but less clearly correct
-bool nextKB(KnownBits &K) {
-  auto NotOne = ~K.One;
-  K.Zero = (K.Zero - NotOne) & NotOne;
-  if (K.Zero == 0) {
-    K.One += 1;
-    if (K.One == 0)
-      return false;
-  }
-  return true;
-}
-
-std::string KBString(KnownBits Known) {
-  std::string s = "";
-  for (int x = 0; x < Known.getBitWidth(); ++x) {
-    if (Known.Zero.isSignBitSet())
-      s += "0";
-    else if (Known.One.isSignBitSet())
-      s += "1";
-    else
-      s += "x";
-    Known.Zero <<= 1;
-    Known.One <<= 1;
-  }
-  return s;
-}
 
 struct BinOp {
   Instruction::BinaryOps Opcode;
@@ -85,35 +41,26 @@ void test(const BinOp &Op) {
   auto DL = M->getDataLayout();
   long Bits = 0, Cases = 0;
 
-  KnownBits K0(W), K1(W);
-  while (true) {
-    auto I = BinaryOperator::Create(Op.Opcode, maskKnown(K0, Args[0]), maskKnown(K1, Args[1]));
-    I->setHasNoSignedWrap(Op.nsw);
-    I->setHasNoUnsignedWrap(Op.nuw);
-    I->setIsExact(Op.exact);
-    B.Insert(I);
-    auto R = B.CreateRet(I);
-    KnownBits KB = computeKnownBits(I, DL);
-    Bits += KB.Zero.countPopulation() + KB.One.countPopulation();
-    Cases++;
+  auto I = BinaryOperator::Create(Op.Opcode, Args[0], Args[1]);
+  I->setHasNoSignedWrap(Op.nsw);
+  I->setHasNoUnsignedWrap(Op.nuw);
+  I->setIsExact(Op.exact);
+  B.Insert(I);
+  auto R = B.CreateRet(I);
+  
+  if (false) {
+    M->print(errs(), nullptr);
+  }
 
-    if (false) {
-      M->print(errs(), nullptr);
-      outs() << KBString(KB) << "\n";
-    }
-
-    if (!nextKB(K0))
-      if (!nextKB(K1))
+  getInfo(M.get());
+  
+  // this is not good code but should be fine for a very small
+  // number of instructions, as we have here
+  while (!BB->empty()) {
+    for (auto &I2 : *BB) {
+      if (I2.hasNUses(0)) {
+        I2.eraseFromParent();
         break;
-    
-    // this is not good code but should be fine for a very small
-    // number of instructions, as we have here
-    while (!BB->empty()) {
-      for (auto &I2 : *BB) {
-        if (I2.hasNUses(0)) {
-          I2.eraseFromParent();
-          break;
-        }
       }
     }
   }
@@ -126,12 +73,10 @@ void test(const BinOp &Op) {
   if (Op.exact)
     outs() << "exact ";
   outs() << "\n";
-  outs() << "  total known bits = " << Bits << " (" << Cases << " cases)\n";
 }
 
 std::vector<BinOp> Ops {
   { Instruction::Add, false, false, false },
-#if 0
   { Instruction::Add, true, false, false },
   { Instruction::Add, false, true, false },
   { Instruction::Add, true, true, false },
@@ -157,7 +102,6 @@ std::vector<BinOp> Ops {
   { Instruction::And, false, false, false },
   { Instruction::Or, false, false, false },
   { Instruction::Xor, false, false, false },
-#endif
 };
   
 } // namespace
