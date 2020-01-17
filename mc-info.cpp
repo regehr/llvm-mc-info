@@ -22,7 +22,7 @@ using namespace llvm;
 
 namespace {
 
-int getCodeSize(Module *M, TargetMachine *TM) {
+long getCodeSize(Module *M, TargetMachine *TM) {
   M->setDataLayout(TM->createDataLayout());
   SmallVector<char, 256> DotO;
   raw_svector_ostream dest(DotO);
@@ -40,12 +40,10 @@ int getCodeSize(Module *M, TargetMachine *TM) {
     report_fatal_error("createObjectFile() failed");
   object::ObjectFile *OF = ObjOrErr.get().get();  
   auto SecList = OF->sections();
-  int Size = 0;
+  long Size = 0;
   for (auto &S : SecList) {
-    if (S.isText()) {
+    if (S.isText())
       Size += S.getSize();
-      outs() << "found text section with size: " << S.getSize() << "\n";
-    }
   }
   if (Size > 0)
     return Size;
@@ -78,11 +76,11 @@ int getInfo(Module *M, TargetMachine *TM) {
   outs() << "\n=========================================\n";
   M->print(outs(), nullptr);
 
-  int Size = getCodeSize(M, TM);
+  long Size = getCodeSize(M, TM);
+  outs() << "code size = " << Size << " bytes\n";
   
   auto Asm = makeAssembly(M, TM);
-  outs() << Asm;
-
+  //outs() << Asm;
   mcaInfo(Asm, TM);
 
   return 0;
