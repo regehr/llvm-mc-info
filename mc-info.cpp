@@ -38,8 +38,11 @@ int getCodeSize(Module *M, TargetMachine *TM) {
   auto ObjOrErr = object::ObjectFile::createObjectFile(Buf);
   if (!ObjOrErr)
     report_fatal_error("createObjectFile() failed");
-  object::ObjectFile *OF = ObjOrErr.get()->getBinary();  
-  
+  object::ObjectFile *OF = ObjOrErr.get().get();  
+  auto S = OF->sections();
+
+  // ObjectFile->sections(), SectionRef->isText(), SectionRef->getSize()
+
   return 0;
 }
 
