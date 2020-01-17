@@ -15,6 +15,8 @@ add_definitions(${LLVM_DEFINITIONS})
 
 add_executable(mc-info mc-info.cpp)
 
+set_property(TARGET mc-info PROPERTY CXX_STANDARD 17)
+
 llvm_map_components_to_libnames(llvm_libs analysis asmparser asmprinter bitreader bitwriter codegen core coroutines debuginfodwarf executionengine instrumentation interpreter ipo irreader linker mc mcjit objcarcopts option profiledata scalaropts support target X86AsmParser X86CodeGen)
 
 target_link_libraries(mc-info ${llvm_libs})
