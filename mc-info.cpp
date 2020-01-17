@@ -16,11 +16,15 @@
 #include <memory>
 #include <utility>
 
+// TODO get code size
+// ObjectFile->sections(), SectionRef->isText(), SectionRef->getSize()
+// llvm::object::ObjectFile::createObjectFile
+    
+// TODO get cycles from MCA
+
 // TODO optimize the IR before compiling to machine code
 
-// TODO get code size
-
-// TODO get cycles from MCA
+// TODO make souper2llvm respect values with external uses
 
 using namespace llvm;
 
