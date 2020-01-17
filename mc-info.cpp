@@ -1,11 +1,10 @@
 #include "llvm/ADT/APInt.h"
-#include "llvm/Analysis/ValueTracking.h"
-#include "llvm/Support/KnownBits.h"
-#include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -13,8 +12,8 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
-#include <iostream>
-#include <iomanip>
+#include <memory>
+#include <utility>
 
 using namespace llvm;
 
@@ -80,6 +79,7 @@ int getInfo(Module *M) {
 
   // analyze it using mca
 
+  return 0;
 }
 
 const int W = 32;
@@ -93,7 +93,7 @@ struct BinOp {
 };
 
 void test(const BinOp &Op) {
-  auto M = make_unique<Module>("", C);
+  auto M = std::make_unique<Module>("", C);
   std::vector<Type *> T(2, Type::getIntNTy(C, W));
   FunctionType *FT = FunctionType::get(Type::getIntNTy(C, W), T, false);
   Function *F = Function::Create(FT, Function::ExternalLinkage, "test", M.get());
