@@ -23,8 +23,8 @@ namespace {
 int getCodeSize(Module *M, TargetMachine *TM) {
   M->setDataLayout(TM->createDataLayout());
 
-  SmallString<256> Asm;
-  raw_svector_ostream dest(Asm);
+  SmallVector<char, 256> Obj;
+  raw_svector_ostream dest(Obj);
 
   legacy::PassManager pass;
   if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_ObjectFile)) {
@@ -34,7 +34,7 @@ int getCodeSize(Module *M, TargetMachine *TM) {
 
   pass.run(*M);
 
-  return Asm;
+  return 0;
 }
 
 SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
