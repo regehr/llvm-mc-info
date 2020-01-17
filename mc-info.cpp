@@ -5,10 +5,11 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
@@ -19,40 +20,14 @@ using namespace llvm;
 
 namespace {
 
-SmallString<256> makeAssembly(Module *M) {
-  // generate object code
-  InitializeAllTargetInfos();
-  InitializeAllTargets();
-  InitializeAllTargetMCs();
-  InitializeAllAsmParsers();
-  InitializeAllAsmPrinters();
-
-  auto TargetTriple = sys::getDefaultTargetTriple();
-  M->setTargetTriple(TargetTriple);
-
-  std::string Error;
-  auto Target = TargetRegistry::lookupTarget(TargetTriple, Error);
-
-  // Print an error and exit if we couldn't find the requested target.
-  // This generally occurs if we've forgotten to initialise the
-  // TargetRegistry or we have a bogus target triple.
-  if (!Target) {
-    errs() << Error;
-    report_fatal_error("oops");
-  }
-
-  auto CPU = "generic";
-  auto Features = "";
-
-  TargetOptions opt;
-  auto RM = Optional<Reloc::Model>();
-  auto TM = Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
-
+SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
   M->setDataLayout(TM->createDataLayout());
 
   SmallString<256> Asm;
   raw_svector_ostream dest(Asm);
 
+  // FIXME also get code size
+  
   legacy::PassManager pass;
   if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_AssemblyFile)) {
     errs() << "TheTargetMachine can't emit a file of this type";
@@ -64,15 +39,18 @@ SmallString<256> makeAssembly(Module *M) {
   return Asm;
 }
 
+void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
+}
+
 // return 0 for success
-int getInfo(Module *M) {
+int getInfo(Module *M, TargetMachine *TM) {
   outs() << "\n=========================================\n";
   M->print(outs(), nullptr);
 
-  auto Asm = makeAssembly(M);
+  auto Asm = makeAssembly(M, TM);
   outs() << Asm;
 
-  // analyze it using mca
+  mcaInfo(Asm, TM);
 
   return 0;
 }
@@ -87,8 +65,10 @@ struct BinOp {
   bool nsw, nuw, exact;
 };
 
-void test(const BinOp &Op) {
+void test(const BinOp &Op, TargetMachine *TM) {
   auto M = std::make_unique<Module>("", C);
+  M->setTargetTriple(sys::getDefaultTargetTriple());
+
   std::vector<Type *> T(2, Type::getIntNTy(C, W));
   FunctionType *FT = FunctionType::get(Type::getIntNTy(C, W), T, false);
   Function *F = Function::Create(FT, Function::ExternalLinkage, "test", M.get());
@@ -115,18 +95,7 @@ void test(const BinOp &Op) {
   if (verifyModule(*M))
     report_fatal_error("verifyModule");
 
-  getInfo(M.get());
-  
-  // this is not good code but should be fine for a very small
-  // number of instructions, as we have here
-  while (!BB->empty()) {
-    for (auto &I2 : *BB) {
-      if (I2.hasNUses(0)) {
-        I2.eraseFromParent();
-        break;
-      }
-    }
-  }
+  getInfo(M.get(), TM);
 }
 
 std::vector<BinOp> Ops {
@@ -160,8 +129,30 @@ std::vector<BinOp> Ops {
   
 } // namespace
 
-int main(void) {
+int main(int argc, char **argv) {
+  InitLLVM X(argc, argv);
+
+  InitializeAllTargetInfos();
+  InitializeAllTargets();
+  InitializeAllTargetMCs();
+  InitializeAllAsmParsers();
+  InitializeAllAsmPrinters();
+
+  std::string Error;
+  auto Target = TargetRegistry::lookupTarget(sys::getDefaultTargetTriple(), Error);
+  if (!Target) {
+    errs() << Error;
+    report_fatal_error("oops");
+  }
+
+  auto CPU = "generic";
+  auto Features = "";
+
+  TargetOptions opt;
+  auto RM = Optional<Reloc::Model>();
+  auto TM = Target->createTargetMachine(sys::getDefaultTargetTriple(), CPU, Features, opt, RM);
+
   for (auto &Op : Ops)
-    test(Op);
+    test(Op, TM);
   return 0;
 }
