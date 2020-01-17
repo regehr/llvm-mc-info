@@ -20,6 +20,23 @@ using namespace llvm;
 
 namespace {
 
+int getCodeSize(Module *M, TargetMachine *TM) {
+  M->setDataLayout(TM->createDataLayout());
+
+  SmallString<256> Asm;
+  raw_svector_ostream dest(Asm);
+
+  legacy::PassManager pass;
+  if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_ObjectFile)) {
+    errs() << "TheTargetMachine can't emit a file of this type";
+    report_fatal_error("oops");
+  }
+
+  pass.run(*M);
+
+  return Asm;
+}
+
 SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
   M->setDataLayout(TM->createDataLayout());
 
@@ -45,6 +62,8 @@ int getInfo(Module *M, TargetMachine *TM) {
   outs() << "\n=========================================\n";
   M->print(outs(), nullptr);
 
+  int Size = getCodeSize(M, TM);
+  
   auto Asm = makeAssembly(M, TM);
   outs() << Asm;
 
