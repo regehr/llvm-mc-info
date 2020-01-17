@@ -16,6 +16,12 @@
 #include <memory>
 #include <utility>
 
+// TODO optimize the IR before compiling to machine code
+
+// TODO get code size
+
+// TODO get cycles from MCA
+
 using namespace llvm;
 
 namespace {
@@ -26,8 +32,6 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
   SmallString<256> Asm;
   raw_svector_ostream dest(Asm);
 
-  // FIXME also get code size
-  
   legacy::PassManager pass;
   if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_AssemblyFile)) {
     errs() << "TheTargetMachine can't emit a file of this type";
@@ -57,15 +61,15 @@ int getInfo(Module *M, TargetMachine *TM) {
 
 const int W = 32;
 
-LLVMContext C;
-IRBuilder<> B(C);
-
 struct BinOp {
   Instruction::BinaryOps Opcode;
   bool nsw, nuw, exact;
 };
 
 void test(const BinOp &Op, TargetMachine *TM) {
+  LLVMContext C;
+  IRBuilder<> B(C);
+
   auto M = std::make_unique<Module>("", C);
   M->setTargetTriple(sys::getDefaultTargetTriple());
 
