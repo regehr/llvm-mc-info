@@ -120,7 +120,7 @@ void test(const BinOp &Op) {
   if (verifyModule(*M))
     report_fatal_error("verifyModule");
 
-  //getInfo(M.get());
+  getInfo(M.get());
   
   // this is not good code but should be fine for a very small
   // number of instructions, as we have here
