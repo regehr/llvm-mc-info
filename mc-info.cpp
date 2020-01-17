@@ -5,8 +5,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/SmallVectorMemoryBuffer.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
@@ -22,18 +24,22 @@ namespace {
 
 int getCodeSize(Module *M, TargetMachine *TM) {
   M->setDataLayout(TM->createDataLayout());
-
-  SmallVector<char, 256> Obj;
-  raw_svector_ostream dest(Obj);
+  SmallVector<char, 256> DotO;
+  raw_svector_ostream dest(DotO);
 
   legacy::PassManager pass;
   if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_ObjectFile)) {
     errs() << "TheTargetMachine can't emit a file of this type";
     report_fatal_error("oops");
   }
-
   pass.run(*M);
 
+  SmallVectorMemoryBuffer Buf(std::move(DotO));
+  auto ObjOrErr = object::ObjectFile::createObjectFile(Buf);
+  if (!ObjOrErr)
+    report_fatal_error("createObjectFile() failed");
+  object::ObjectFile *OF = ObjOrErr.get()->getBinary();  
+  
   return 0;
 }
 

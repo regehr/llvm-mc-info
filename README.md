@@ -4,7 +4,6 @@
 
 ```
 ObjectFile->sections(), SectionRef->isText(), SectionRef->getSize()
-llvm::object::ObjectFile::createObjectFile
 ```
  
 - get cycles from MCA
