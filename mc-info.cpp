@@ -40,14 +40,17 @@ int getCodeSize(Module *M, TargetMachine *TM) {
     report_fatal_error("createObjectFile() failed");
   object::ObjectFile *OF = ObjOrErr.get().get();  
   auto SecList = OF->sections();
+  int Size = 0;
   for (auto &S : SecList) {
     if (S.isText()) {
-      int Size = S.getSize();
-      outs() << "text section has size: " << Size << "\n";
-      return Size;
+      Size += S.getSize();
+      outs() << "found text section with size: " << S.getSize() << "\n";
     }
   }
-  report_fatal_error("no text segment found");
+  if (Size > 0)
+    return Size;
+  else
+    report_fatal_error("no text segment found");
 }
 
 SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
