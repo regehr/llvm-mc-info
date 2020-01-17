@@ -19,11 +19,7 @@ using namespace llvm;
 
 namespace {
 
-// return 0 for success
-int getInfo(Module *M) {
-  outs() << "\n=========================================\n";
-  M->print(outs(), nullptr);
-
+SmallString<256> makeAssembly(Module *M) {
   // generate object code
   InitializeAllTargetInfos();
   InitializeAllTargets();
@@ -42,7 +38,7 @@ int getInfo(Module *M) {
   // TargetRegistry or we have a bogus target triple.
   if (!Target) {
     errs() << Error;
-    return 1;
+    report_fatal_error("oops");
   }
 
   auto CPU = "generic";
@@ -50,32 +46,31 @@ int getInfo(Module *M) {
 
   TargetOptions opt;
   auto RM = Optional<Reloc::Model>();
-  auto TheTargetMachine =
-      Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
+  auto TM = Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
 
-  M->setDataLayout(TheTargetMachine->createDataLayout());
+  M->setDataLayout(TM->createDataLayout());
 
-  auto Filename = "output.o";
-  std::error_code EC;
-  raw_fd_ostream dest(Filename, EC, sys::fs::OF_None);
-
-  if (EC) {
-    errs() << "Could not open file: " << EC.message();
-    return 1;
-  }
+  SmallString<256> Asm;
+  raw_svector_ostream dest(Asm);
 
   legacy::PassManager pass;
-  auto FileType = CGFT_ObjectFile;
-
-  if (TheTargetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
+  if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_AssemblyFile)) {
     errs() << "TheTargetMachine can't emit a file of this type";
-    return 1;
+    report_fatal_error("oops");
   }
 
   pass.run(*M);
-  dest.flush();
 
-  outs() << "Wrote " << Filename << "\n";
+  return Asm;
+}
+
+// return 0 for success
+int getInfo(Module *M) {
+  outs() << "\n=========================================\n";
+  M->print(outs(), nullptr);
+
+  auto Asm = makeAssembly(M);
+  outs() << Asm;
 
   // analyze it using mca
 
