@@ -106,13 +106,21 @@ void test(const BinOp &Op) {
   long Bits = 0, Cases = 0;
 
   auto I = BinaryOperator::Create(Op.Opcode, Args[0], Args[1]);
-  I->setHasNoSignedWrap(Op.nsw);
-  I->setHasNoUnsignedWrap(Op.nuw);
-  I->setIsExact(Op.exact);
+  if (Op.nsw)
+    I->setHasNoSignedWrap();
+  if (Op.nuw)
+    I->setHasNoUnsignedWrap();
+  if (Op.exact)
+    I->setIsExact();
   B.Insert(I);
   auto R = B.CreateRet(I);
 
-  getInfo(M.get());
+  if (verifyFunction(*F))
+    report_fatal_error("verifyFunction");
+  if (verifyModule(*M))
+    report_fatal_error("verifyModule");
+
+  //getInfo(M.get());
   
   // this is not good code but should be fine for a very small
   // number of instructions, as we have here
