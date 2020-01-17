@@ -21,6 +21,6 @@ add_definitions(${LLVM_DEFINITIONS})
 
 add_executable(mc-info mc-info.cpp)
 
-llvm_map_components_to_libnames(llvm_libs support core irreader analysis)
+llvm_map_components_to_libnames(llvm_libs all)
 
 target_link_libraries(mc-info ${llvm_libs})
