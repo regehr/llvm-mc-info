@@ -80,7 +80,7 @@ int getInfo(Module *M, TargetMachine *TM) {
   outs() << "code size = " << Size << " bytes\n";
   
   auto Asm = makeAssembly(M, TM);
-  //outs() << Asm;
+  outs() << Asm;
   mcaInfo(Asm, TM);
 
   return 0;
