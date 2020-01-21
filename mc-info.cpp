@@ -1,3 +1,6 @@
+#include "CodeRegion.h"
+#include "CodeRegionGenerator.h"
+
 #include "llvm/ADT/APInt.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
@@ -63,7 +66,7 @@ long getCodeSize(Module *M, TargetMachine *TM) {
 
   legacy::PassManager pass;
   if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_ObjectFile)) {
-    errs() << "TheTargetMachine can't emit a file of this type";
+    errs() << "Target machine can't emit a file of this type";
     report_fatal_error("oops");
   }
   pass.run(*M);
@@ -93,7 +96,7 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
 
   legacy::PassManager pass;
   if (TM->addPassesToEmitFile(pass, dest, nullptr, CGFT_AssemblyFile)) {
-    errs() << "TheTargetMachine can't emit a file of this type";
+    errs() << "Target machine can't emit a file of this type";
     report_fatal_error("oops");
   }
 
@@ -135,21 +138,21 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
 
   SrcMgr.AddNewSourceBuffer(std::move(BufferPtr), SMLoc());
 
-#if 0
-
   MCContext Ctx(MAI.get(), MRI.get(), &MOFI, &SrcMgr);
 
   MOFI.InitMCObjectFileInfo(TheTriple, /* PIC= */ false, Ctx);
 
   std::unique_ptr<buffer_ostream> BOS;
 
-  std::unique_ptr<MCInstrInfo> MCII(TheTarget->createMCInstrInfo());
+  std::unique_ptr<MCInstrInfo> MCII(TM->getTarget().createMCInstrInfo());
 
   std::unique_ptr<MCInstrAnalysis> MCIA(
-      TheTarget->createMCInstrAnalysis(MCII.get()));
+      TM->getTarget().createMCInstrAnalysis(MCII.get()));
 
+  mca::AsmCodeRegionGenerator CRG(TM->getTarget(), SrcMgr, Ctx, *MAI, *STI, *MCII);
+
+#if 0
   // Parse the input and create CodeRegions that llvm-mca can analyze.
-  mca::AsmCodeRegionGenerator CRG(*TheTarget, SrcMgr, Ctx, *MAI, *STI, *MCII);
   Expected<const mca::CodeRegions &> RegionsOrErr = CRG.parseCodeRegions();
   if (!RegionsOrErr) {
     if (auto Err =
