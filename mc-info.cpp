@@ -15,6 +15,28 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
+#include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCTargetOptionsCommandFlags.inc"
+#include "llvm/MCA/CodeEmitter.h"
+#include "llvm/MCA/Context.h"
+#include "llvm/MCA/InstrBuilder.h"
+#include "llvm/MCA/Pipeline.h"
+#include "llvm/MCA/Stages/EntryStage.h"
+#include "llvm/MCA/Stages/InstructionTables.h"
+#include "llvm/MCA/Support.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/WithColor.h"
+
 #include <memory>
 #include <utility>
 
@@ -71,16 +93,17 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
 // heavily adapted from llvm-mca.cpp
 void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   Triple TheTriple(sys::getDefaultTargetTriple());
+  auto TripleName = Triple::normalize(sys::getDefaultTargetTriple());
   auto MCPU = llvm::sys::getHostCPUName();
 
   auto BufferPtr = MemoryBuffer::getMemBufferCopy(Asm);
   
-#if 0
-
   std::unique_ptr<MCSubtargetInfo> STI(
-      TheTarget->createMCSubtargetInfo(TripleName, MCPU, MATTR));
+      TM->getTarget().createMCSubtargetInfo(TripleName, MCPU, ""));
   if (!STI->isCPUStringValid(MCPU))
-    return 1;
+    report_fatal_error("invalid CPU string");
+
+#if 0
 
   if (!PrintInstructionTables && !STI->getSchedModel().isOutOfOrder()) {
     WithColor::error() << "please specify an out-of-order cpu. '" << MCPU
