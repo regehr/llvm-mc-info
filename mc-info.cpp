@@ -16,6 +16,17 @@
 #include "llvm/Target/TargetOptions.h"
 
 // fixme remove unneeded ones
+#include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCCodeEmitter.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCInstPrinter.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCObjectWriter.h"
+#include "llvm/MC/MCParser/AsmLexer.h"
+#include "llvm/MC/MCParser/MCTargetAsmParser.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptionsCommandFlags.inc"
 #include "llvm/MCA/CodeEmitter.h"
@@ -114,17 +125,17 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
 
   MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
 
-#if 0
-
   std::unique_ptr<MCAsmInfo> MAI(
-      TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
-  assert(MAI && "Unable to create target asm info!");
+    TM->getTarget().createMCAsmInfo(*MRI, TripleName, MCOptions));
+  if (!MAI)
+    report_fatal_error("Unable to create target asm info!");
 
   MCObjectFileInfo MOFI;
   SourceMgr SrcMgr;
 
-  // Tell SrcMgr about this buffer, which is what the parser will pick up.
-  SrcMgr.AddNewSourceBuffer(std::move(*BufferPtr), SMLoc());
+  SrcMgr.AddNewSourceBuffer(std::move(BufferPtr), SMLoc());
+
+#if 0
 
   MCContext Ctx(MAI.get(), MRI.get(), &MOFI, &SrcMgr);
 
