@@ -170,13 +170,6 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   if (!IP)
     report_fatal_error("cannot create instruction printer");
 
-#if 0
-
-  // Set the display preference for hex vs. decimal immediates.
-  IP->setPrintImmHex(PrintImmHex);
-
-  std::unique_ptr<ToolOutputFile> TOF = std::move(*OF);
-
   const MCSchedModel &SM = STI->getSchedModel();
 
   // Create an instruction builder.
@@ -184,6 +177,8 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
 
   // Create a context to control ownership of the pipeline hardware.
   mca::Context MCA(*MRI, *STI);
+
+#if 0
 
   mca::PipelineOptions PO(MicroOpQueue, DecoderThroughput, DispatchWidth,
                           RegisterFileSize, LoadQueueSize, StoreQueueSize,
