@@ -178,11 +178,11 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   // Create a context to control ownership of the pipeline hardware.
   mca::Context MCA(*MRI, *STI);
 
-#if 0
-
   mca::PipelineOptions PO(MicroOpQueue, DecoderThroughput, DispatchWidth,
                           RegisterFileSize, LoadQueueSize, StoreQueueSize,
                           AssumeNoAlias, EnableBottleneckAnalysis);
+
+#if 0
 
   // Number each region in the sequence.
   unsigned RegionIdx = 0;
