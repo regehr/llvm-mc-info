@@ -68,23 +68,14 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
   return Asm;
 }
 
+// heavily adapted from llvm-mca.cpp
 void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
-  // GetTarget() may replaced TripleName with a default triple.
-  // For safety, reconstruct the Triple object.
   Triple TheTriple(sys::getDefaultTargetTriple());
+  auto MCPU = llvm::sys::getHostCPUName();
+
+  auto BufferPtr = MemoryBuffer::getMemBufferCopy(Asm);
+  
 #if 0
-  ErrorOr<std::unique_ptr<MemoryBuffer>> BufferPtr =
-      MemoryBuffer::getFileOrSTDIN(InputFilename);
-  if (std::error_code EC = BufferPtr.getError()) {
-    WithColor::error() << InputFilename << ": " << EC.message() << '\n';
-    return 1;
-  }
-
-  // Apply overrides to llvm-mca specific options.
-  processViewOptions();
-
-  if (!MCPU.compare("native"))
-    MCPU = llvm::sys::getHostCPUName();
 
   std::unique_ptr<MCSubtargetInfo> STI(
       TheTarget->createMCSubtargetInfo(TripleName, MCPU, MATTR));
