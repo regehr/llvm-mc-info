@@ -151,49 +151,26 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
 
   mca::AsmCodeRegionGenerator CRG(TM->getTarget(), SrcMgr, Ctx, *MAI, *STI, *MCII);
 
-#if 0
   // Parse the input and create CodeRegions that llvm-mca can analyze.
   Expected<const mca::CodeRegions &> RegionsOrErr = CRG.parseCodeRegions();
-  if (!RegionsOrErr) {
-    if (auto Err =
-            handleErrors(RegionsOrErr.takeError(), [](const StringError &E) {
-              WithColor::error() << E.getMessage() << '\n';
-            })) {
-      // Default case.
-      WithColor::error() << toString(std::move(Err)) << '\n';
-    }
-    return 1;
-  }
+  if (!RegionsOrErr)
+    report_fatal_error("cannot parse input regions");
   const mca::CodeRegions &Regions = *RegionsOrErr;
 
   // Early exit if errors were found by the code region parsing logic.
   if (!Regions.isValid())
-    return 1;
+    report_fatal_error("invalid regions");
 
-  if (Regions.empty()) {
-    WithColor::error() << "no assembly instructions found.\n";
-    return 1;
-  }
-
-  // Now initialize the output file.
-  auto OF = getOutputStream();
-  if (std::error_code EC = OF.getError()) {
-    WithColor::error() << EC.message() << '\n';
-    return 1;
-  }
+  if (Regions.empty())
+    report_fatal_error("no instructions found");
 
   unsigned AssemblerDialect = CRG.getAssemblerDialect();
-  if (OutputAsmVariant >= 0)
-    AssemblerDialect = static_cast<unsigned>(OutputAsmVariant);
-  std::unique_ptr<MCInstPrinter> IP(TheTarget->createMCInstPrinter(
+  std::unique_ptr<MCInstPrinter> IP(TM->getTarget().createMCInstPrinter(
       Triple(TripleName), AssemblerDialect, *MAI, *MCII, *MRI));
-  if (!IP) {
-    WithColor::error()
-        << "unable to create instruction printer for target triple '"
-        << TheTriple.normalize() << "' with assembly variant "
-        << AssemblerDialect << ".\n";
-    return 1;
-  }
+  if (!IP)
+    report_fatal_error("cannot create instruction printer");
+
+#if 0
 
   // Set the display preference for hex vs. decimal immediates.
   IP->setPrintImmHex(PrintImmHex);
