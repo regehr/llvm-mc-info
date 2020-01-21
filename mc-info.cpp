@@ -69,6 +69,261 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
 }
 
 void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
+  // GetTarget() may replaced TripleName with a default triple.
+  // For safety, reconstruct the Triple object.
+  Triple TheTriple(sys::getDefaultTargetTriple());
+#if 0
+  ErrorOr<std::unique_ptr<MemoryBuffer>> BufferPtr =
+      MemoryBuffer::getFileOrSTDIN(InputFilename);
+  if (std::error_code EC = BufferPtr.getError()) {
+    WithColor::error() << InputFilename << ": " << EC.message() << '\n';
+    return 1;
+  }
+
+  // Apply overrides to llvm-mca specific options.
+  processViewOptions();
+
+  if (!MCPU.compare("native"))
+    MCPU = llvm::sys::getHostCPUName();
+
+  std::unique_ptr<MCSubtargetInfo> STI(
+      TheTarget->createMCSubtargetInfo(TripleName, MCPU, MATTR));
+  if (!STI->isCPUStringValid(MCPU))
+    return 1;
+
+  if (!PrintInstructionTables && !STI->getSchedModel().isOutOfOrder()) {
+    WithColor::error() << "please specify an out-of-order cpu. '" << MCPU
+                       << "' is an in-order cpu.\n";
+    return 1;
+  }
+
+  if (!STI->getSchedModel().hasInstrSchedModel()) {
+    WithColor::error()
+        << "unable to find instruction-level scheduling information for"
+        << " target triple '" << TheTriple.normalize() << "' and cpu '" << MCPU
+        << "'.\n";
+
+    if (STI->getSchedModel().InstrItineraries)
+      WithColor::note()
+          << "cpu '" << MCPU << "' provides itineraries. However, "
+          << "instruction itineraries are currently unsupported.\n";
+    return 1;
+  }
+
+  std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(TripleName));
+  assert(MRI && "Unable to create target register info!");
+
+  MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
+  std::unique_ptr<MCAsmInfo> MAI(
+      TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
+  assert(MAI && "Unable to create target asm info!");
+
+  MCObjectFileInfo MOFI;
+  SourceMgr SrcMgr;
+
+  // Tell SrcMgr about this buffer, which is what the parser will pick up.
+  SrcMgr.AddNewSourceBuffer(std::move(*BufferPtr), SMLoc());
+
+  MCContext Ctx(MAI.get(), MRI.get(), &MOFI, &SrcMgr);
+
+  MOFI.InitMCObjectFileInfo(TheTriple, /* PIC= */ false, Ctx);
+
+  std::unique_ptr<buffer_ostream> BOS;
+
+  std::unique_ptr<MCInstrInfo> MCII(TheTarget->createMCInstrInfo());
+
+  std::unique_ptr<MCInstrAnalysis> MCIA(
+      TheTarget->createMCInstrAnalysis(MCII.get()));
+
+  // Parse the input and create CodeRegions that llvm-mca can analyze.
+  mca::AsmCodeRegionGenerator CRG(*TheTarget, SrcMgr, Ctx, *MAI, *STI, *MCII);
+  Expected<const mca::CodeRegions &> RegionsOrErr = CRG.parseCodeRegions();
+  if (!RegionsOrErr) {
+    if (auto Err =
+            handleErrors(RegionsOrErr.takeError(), [](const StringError &E) {
+              WithColor::error() << E.getMessage() << '\n';
+            })) {
+      // Default case.
+      WithColor::error() << toString(std::move(Err)) << '\n';
+    }
+    return 1;
+  }
+  const mca::CodeRegions &Regions = *RegionsOrErr;
+
+  // Early exit if errors were found by the code region parsing logic.
+  if (!Regions.isValid())
+    return 1;
+
+  if (Regions.empty()) {
+    WithColor::error() << "no assembly instructions found.\n";
+    return 1;
+  }
+
+  // Now initialize the output file.
+  auto OF = getOutputStream();
+  if (std::error_code EC = OF.getError()) {
+    WithColor::error() << EC.message() << '\n';
+    return 1;
+  }
+
+  unsigned AssemblerDialect = CRG.getAssemblerDialect();
+  if (OutputAsmVariant >= 0)
+    AssemblerDialect = static_cast<unsigned>(OutputAsmVariant);
+  std::unique_ptr<MCInstPrinter> IP(TheTarget->createMCInstPrinter(
+      Triple(TripleName), AssemblerDialect, *MAI, *MCII, *MRI));
+  if (!IP) {
+    WithColor::error()
+        << "unable to create instruction printer for target triple '"
+        << TheTriple.normalize() << "' with assembly variant "
+        << AssemblerDialect << ".\n";
+    return 1;
+  }
+
+  // Set the display preference for hex vs. decimal immediates.
+  IP->setPrintImmHex(PrintImmHex);
+
+  std::unique_ptr<ToolOutputFile> TOF = std::move(*OF);
+
+  const MCSchedModel &SM = STI->getSchedModel();
+
+  // Create an instruction builder.
+  mca::InstrBuilder IB(*STI, *MCII, *MRI, MCIA.get());
+
+  // Create a context to control ownership of the pipeline hardware.
+  mca::Context MCA(*MRI, *STI);
+
+  mca::PipelineOptions PO(MicroOpQueue, DecoderThroughput, DispatchWidth,
+                          RegisterFileSize, LoadQueueSize, StoreQueueSize,
+                          AssumeNoAlias, EnableBottleneckAnalysis);
+
+  // Number each region in the sequence.
+  unsigned RegionIdx = 0;
+
+  std::unique_ptr<MCCodeEmitter> MCE(
+      TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx));
+
+  std::unique_ptr<MCAsmBackend> MAB(TheTarget->createMCAsmBackend(
+      *STI, *MRI, InitMCTargetOptionsFromFlags()));
+
+  for (const std::unique_ptr<mca::CodeRegion> &Region : Regions) {
+    // Skip empty code regions.
+    if (Region->empty())
+      continue;
+
+    // Don't print the header of this region if it is the default region, and
+    // it doesn't have an end location.
+    if (Region->startLoc().isValid() || Region->endLoc().isValid()) {
+      TOF->os() << "\n[" << RegionIdx++ << "] Code Region";
+      StringRef Desc = Region->getDescription();
+      if (!Desc.empty())
+        TOF->os() << " - " << Desc;
+      TOF->os() << "\n\n";
+    }
+
+    // Lower the MCInst sequence into an mca::Instruction sequence.
+    ArrayRef<MCInst> Insts = Region->getInstructions();
+    mca::CodeEmitter CE(*STI, *MAB, *MCE, Insts);
+    std::vector<std::unique_ptr<mca::Instruction>> LoweredSequence;
+    for (const MCInst &MCI : Insts) {
+      Expected<std::unique_ptr<mca::Instruction>> Inst =
+          IB.createInstruction(MCI);
+      if (!Inst) {
+        if (auto NewE = handleErrors(
+                Inst.takeError(),
+                [&IP, &STI](const mca::InstructionError<MCInst> &IE) {
+                  std::string InstructionStr;
+                  raw_string_ostream SS(InstructionStr);
+                  WithColor::error() << IE.Message << '\n';
+                  IP->printInst(&IE.Inst, 0, "", *STI, SS);
+                  SS.flush();
+                  WithColor::note()
+                      << "instruction: " << InstructionStr << '\n';
+                })) {
+          // Default case.
+          WithColor::error() << toString(std::move(NewE));
+        }
+        return 1;
+      }
+
+      LoweredSequence.emplace_back(std::move(Inst.get()));
+    }
+
+    mca::SourceMgr S(LoweredSequence, PrintInstructionTables ? 1 : Iterations);
+
+    if (PrintInstructionTables) {
+      //  Create a pipeline, stages, and a printer.
+      auto P = std::make_unique<mca::Pipeline>();
+      P->appendStage(std::make_unique<mca::EntryStage>(S));
+      P->appendStage(std::make_unique<mca::InstructionTables>(SM));
+      mca::PipelinePrinter Printer(*P);
+
+      // Create the views for this pipeline, execute, and emit a report.
+      if (PrintInstructionInfoView) {
+        Printer.addView(std::make_unique<mca::InstructionInfoView>(
+            *STI, *MCII, CE, ShowEncoding, Insts, *IP));
+      }
+      Printer.addView(
+          std::make_unique<mca::ResourcePressureView>(*STI, *IP, Insts));
+
+      if (!runPipeline(*P))
+        return 1;
+
+      Printer.printReport(TOF->os());
+      continue;
+    }
+
+    // Create a basic pipeline simulating an out-of-order backend.
+    auto P = MCA.createDefaultPipeline(PO, S);
+    mca::PipelinePrinter Printer(*P);
+
+    if (PrintSummaryView)
+      Printer.addView(
+          std::make_unique<mca::SummaryView>(SM, Insts, DispatchWidth));
+
+    if (EnableBottleneckAnalysis) {
+      Printer.addView(std::make_unique<mca::BottleneckAnalysis>(
+          *STI, *IP, Insts, S.getNumIterations()));
+    }
+
+    if (PrintInstructionInfoView)
+      Printer.addView(std::make_unique<mca::InstructionInfoView>(
+          *STI, *MCII, CE, ShowEncoding, Insts, *IP));
+
+    if (PrintDispatchStats)
+      Printer.addView(std::make_unique<mca::DispatchStatistics>());
+
+    if (PrintSchedulerStats)
+      Printer.addView(std::make_unique<mca::SchedulerStatistics>(*STI));
+
+    if (PrintRetireStats)
+      Printer.addView(std::make_unique<mca::RetireControlUnitStatistics>(SM));
+
+    if (PrintRegisterFileStats)
+      Printer.addView(std::make_unique<mca::RegisterFileStatistics>(*STI));
+
+    if (PrintResourcePressureView)
+      Printer.addView(
+          std::make_unique<mca::ResourcePressureView>(*STI, *IP, Insts));
+
+    if (PrintTimelineView) {
+      unsigned TimelineIterations =
+          TimelineMaxIterations ? TimelineMaxIterations : 10;
+      Printer.addView(std::make_unique<mca::TimelineView>(
+          *STI, *IP, Insts, std::min(TimelineIterations, S.getNumIterations()),
+          TimelineMaxCycles));
+    }
+
+    if (!runPipeline(*P))
+      return 1;
+
+    Printer.printReport(TOF->os());
+
+    // Clear the InstrBuilder internal state in preparation for another round.
+    IB.clear();
+  }
+
+  TOF->keep();
+#endif
 }
 
 // return 0 for success
