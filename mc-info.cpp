@@ -15,6 +15,7 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 
+// fixme remove unneeded ones
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptionsCommandFlags.inc"
 #include "llvm/MCA/CodeEmitter.h"
@@ -100,29 +101,14 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   
   std::unique_ptr<MCSubtargetInfo> STI(
       TM->getTarget().createMCSubtargetInfo(TripleName, MCPU, ""));
+
   if (!STI->isCPUStringValid(MCPU))
     report_fatal_error("invalid CPU string");
 
+  if (!STI->getSchedModel().hasInstrSchedModel())
+    report_fatal_error("unable to find scheduling model");
+
 #if 0
-
-  if (!PrintInstructionTables && !STI->getSchedModel().isOutOfOrder()) {
-    WithColor::error() << "please specify an out-of-order cpu. '" << MCPU
-                       << "' is an in-order cpu.\n";
-    return 1;
-  }
-
-  if (!STI->getSchedModel().hasInstrSchedModel()) {
-    WithColor::error()
-        << "unable to find instruction-level scheduling information for"
-        << " target triple '" << TheTriple.normalize() << "' and cpu '" << MCPU
-        << "'.\n";
-
-    if (STI->getSchedModel().InstrItineraries)
-      WithColor::note()
-          << "cpu '" << MCPU << "' provides itineraries. However, "
-          << "instruction itineraries are currently unsupported.\n";
-    return 1;
-  }
 
   std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(TripleName));
   assert(MRI && "Unable to create target register info!");
