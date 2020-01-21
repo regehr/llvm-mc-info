@@ -108,10 +108,11 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   if (!STI->getSchedModel().hasInstrSchedModel())
     report_fatal_error("unable to find scheduling model");
 
-#if 0
+  std::unique_ptr<MCRegisterInfo> MRI(TM->getTarget().createMCRegInfo(TripleName));
+  if (!MRI)
+    report_fatal_error("Unable to create target register info!");
 
-  std::unique_ptr<MCRegisterInfo> MRI(TheTarget->createMCRegInfo(TripleName));
-  assert(MRI && "Unable to create target register info!");
+#if 0
 
   MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
   std::unique_ptr<MCAsmInfo> MAI(
