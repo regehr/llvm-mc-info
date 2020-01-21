@@ -112,9 +112,10 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   if (!MRI)
     report_fatal_error("Unable to create target register info!");
 
+  MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
+
 #if 0
 
-  MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
   std::unique_ptr<MCAsmInfo> MAI(
       TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
   assert(MAI && "Unable to create target asm info!");
