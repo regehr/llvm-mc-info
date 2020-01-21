@@ -178,20 +178,19 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   // Create a context to control ownership of the pipeline hardware.
   mca::Context MCA(*MRI, *STI);
 
-#if 0
-
-  mca::PipelineOptions PO(MicroOpQueue, DecoderThroughput, DispatchWidth,
-                          RegisterFileSize, LoadQueueSize, StoreQueueSize,
-                          AssumeNoAlias, EnableBottleneckAnalysis);
+  // gotta be a better way to do this
+  mca::PipelineOptions PO(0, 0, 0, 0, 0, 0, true, false);
 
   // Number each region in the sequence.
   unsigned RegionIdx = 0;
 
   std::unique_ptr<MCCodeEmitter> MCE(
-      TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx));
+      TM->getTarget().createMCCodeEmitter(*MCII, *MRI, Ctx));
 
-  std::unique_ptr<MCAsmBackend> MAB(TheTarget->createMCAsmBackend(
+  std::unique_ptr<MCAsmBackend> MAB(TM->getTarget().createMCAsmBackend(
       *STI, *MRI, InitMCTargetOptionsFromFlags()));
+
+#if 0
 
   for (const std::unique_ptr<mca::CodeRegion> &Region : Regions) {
     // Skip empty code regions.
