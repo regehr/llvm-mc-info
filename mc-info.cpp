@@ -257,28 +257,27 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
     if (true)
       Printer.addView(std::make_unique<mca::DispatchStatistics>());
 
-#if 0
-
-    if (PrintSchedulerStats)
+    if (true)
       Printer.addView(std::make_unique<mca::SchedulerStatistics>(*STI));
 
-    if (PrintRetireStats)
+    if (true)
       Printer.addView(std::make_unique<mca::RetireControlUnitStatistics>(SM));
 
-    if (PrintRegisterFileStats)
+    if (true)
       Printer.addView(std::make_unique<mca::RegisterFileStatistics>(*STI));
 
-    if (PrintResourcePressureView)
+    if (true)
       Printer.addView(
           std::make_unique<mca::ResourcePressureView>(*STI, *IP, Insts));
 
-    if (PrintTimelineView) {
-      unsigned TimelineIterations =
-          TimelineMaxIterations ? TimelineMaxIterations : 10;
+    if (true) {
+      unsigned TimelineIterations = 10;
       Printer.addView(std::make_unique<mca::TimelineView>(
           *STI, *IP, Insts, std::min(TimelineIterations, S.getNumIterations()),
-          TimelineMaxCycles));
+          80));
     }
+
+#if 0
 
     if (!runPipeline(*P))
       return 1;
