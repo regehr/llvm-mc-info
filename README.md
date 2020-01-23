@@ -8,3 +8,4 @@
 
 - make souper2llvm respect values with external uses
 
+- support multiple architectures, average across them or something
