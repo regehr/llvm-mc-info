@@ -115,10 +115,13 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
   return Asm;
 }
 
+//auto Trip = sys::getDefaultTargetTriple();
+std::string Trip = "ppc-apple-darwin";
+
 // heavily adapted from llvm-mca.cpp
 void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
-  Triple TheTriple(sys::getDefaultTargetTriple());
-  auto TripleName = Triple::normalize(sys::getDefaultTargetTriple());
+  Triple TheTriple(Trip);
+  auto TripleName = Triple::normalize(Trip);
   auto MCPU = llvm::sys::getHostCPUName();
 
   auto BufferPtr = MemoryBuffer::getMemBufferCopy(Asm);
@@ -316,7 +319,7 @@ void test(const BinOp &Op, TargetMachine *TM) {
   IRBuilder<> B(C);
 
   auto M = std::make_unique<Module>("", C);
-  M->setTargetTriple(sys::getDefaultTargetTriple());
+  M->setTargetTriple(Trip);
 
   std::vector<Type *> T(2, Type::getIntNTy(C, W));
   FunctionType *FT = FunctionType::get(Type::getIntNTy(C, W), T, false);
@@ -388,7 +391,7 @@ int main(int argc, char **argv) {
   InitializeAllAsmPrinters();
 
   std::string Error;
-  auto Target = TargetRegistry::lookupTarget(sys::getDefaultTargetTriple(), Error);
+  auto Target = TargetRegistry::lookupTarget(Trip, Error);
   if (!Target) {
     errs() << Error;
     report_fatal_error("oops");
@@ -399,7 +402,7 @@ int main(int argc, char **argv) {
 
   TargetOptions opt;
   auto RM = Optional<Reloc::Model>();
-  auto TM = Target->createTargetMachine(sys::getDefaultTargetTriple(), CPU, Features, opt, RM);
+  auto TM = Target->createTargetMachine(Trip, CPU, Features, opt, RM);
 
   for (auto &Op : Ops)
     test(Op, TM);
