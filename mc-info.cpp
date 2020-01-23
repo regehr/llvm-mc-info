@@ -1,5 +1,15 @@
 #include "CodeRegion.h"
 #include "CodeRegionGenerator.h"
+#include "PipelinePrinter.h"
+#include "BottleneckAnalysis.h"
+#include "DispatchStatistics.h"
+#include "InstructionInfoView.h"
+#include "RegisterFileStatistics.h"
+#include "ResourcePressureView.h"
+#include "RetireControlUnitStatistics.h"
+#include "SchedulerStatistics.h"
+#include "SummaryView.h"
+#include "TimelineView.h"
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/IR/Function.h"
@@ -190,21 +200,24 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   std::unique_ptr<MCAsmBackend> MAB(TM->getTarget().createMCAsmBackend(
       *STI, *MRI, InitMCTargetOptionsFromFlags()));
 
-#if 0
-
+  int Count = 0;
+  
   for (const std::unique_ptr<mca::CodeRegion> &Region : Regions) {
-    // Skip empty code regions.
+  
+    // Skip empty code regions
     if (Region->empty())
       continue;
 
+    outs() << "non-empty region " << Count++ << "\n";
+  
     // Don't print the header of this region if it is the default region, and
     // it doesn't have an end location.
     if (Region->startLoc().isValid() || Region->endLoc().isValid()) {
-      TOF->os() << "\n[" << RegionIdx++ << "] Code Region";
+      outs() << "\n[" << RegionIdx++ << "] Code Region";
       StringRef Desc = Region->getDescription();
       if (!Desc.empty())
-        TOF->os() << " - " << Desc;
-      TOF->os() << "\n\n";
+        outs() << " - " << Desc;
+      outs() << "\n\n";
     }
 
     // Lower the MCInst sequence into an mca::Instruction sequence.
@@ -214,58 +227,23 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
     for (const MCInst &MCI : Insts) {
       Expected<std::unique_ptr<mca::Instruction>> Inst =
           IB.createInstruction(MCI);
-      if (!Inst) {
-        if (auto NewE = handleErrors(
-                Inst.takeError(),
-                [&IP, &STI](const mca::InstructionError<MCInst> &IE) {
-                  std::string InstructionStr;
-                  raw_string_ostream SS(InstructionStr);
-                  WithColor::error() << IE.Message << '\n';
-                  IP->printInst(&IE.Inst, 0, "", *STI, SS);
-                  SS.flush();
-                  WithColor::note()
-                      << "instruction: " << InstructionStr << '\n';
-                })) {
-          // Default case.
-          WithColor::error() << toString(std::move(NewE));
-        }
-        return 1;
-      }
+      if (!Inst)
+        report_fatal_error("cannot create MCI");
 
       LoweredSequence.emplace_back(std::move(Inst.get()));
     }
 
-    mca::SourceMgr S(LoweredSequence, PrintInstructionTables ? 1 : Iterations);
-
-    if (PrintInstructionTables) {
-      //  Create a pipeline, stages, and a printer.
-      auto P = std::make_unique<mca::Pipeline>();
-      P->appendStage(std::make_unique<mca::EntryStage>(S));
-      P->appendStage(std::make_unique<mca::InstructionTables>(SM));
-      mca::PipelinePrinter Printer(*P);
-
-      // Create the views for this pipeline, execute, and emit a report.
-      if (PrintInstructionInfoView) {
-        Printer.addView(std::make_unique<mca::InstructionInfoView>(
-            *STI, *MCII, CE, ShowEncoding, Insts, *IP));
-      }
-      Printer.addView(
-          std::make_unique<mca::ResourcePressureView>(*STI, *IP, Insts));
-
-      if (!runPipeline(*P))
-        return 1;
-
-      Printer.printReport(TOF->os());
-      continue;
-    }
+    mca::SourceMgr S(LoweredSequence, 0);
 
     // Create a basic pipeline simulating an out-of-order backend.
     auto P = MCA.createDefaultPipeline(PO, S);
     mca::PipelinePrinter Printer(*P);
 
-    if (PrintSummaryView)
+    if (true)
       Printer.addView(
-          std::make_unique<mca::SummaryView>(SM, Insts, DispatchWidth));
+          std::make_unique<mca::SummaryView>(SM, Insts, 0));
+
+#if 0
 
     if (EnableBottleneckAnalysis) {
       Printer.addView(std::make_unique<mca::BottleneckAnalysis>(
@@ -307,10 +285,8 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
 
     // Clear the InstrBuilder internal state in preparation for another round.
     IB.clear();
-  }
-
-  TOF->keep();
 #endif
+  }
 }
 
 // return 0 for success
@@ -322,7 +298,7 @@ int getInfo(Module *M, TargetMachine *TM) {
   outs() << "code size = " << Size << " bytes\n";
   
   auto Asm = makeAssembly(M, TM);
-  outs() << Asm;
+  //outs() << Asm;
   mcaInfo(Asm, TM);
 
   return 0;
