@@ -277,12 +277,14 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
           80));
     }
 
+    Expected<unsigned> Cycles = P->run();
+    if (!Cycles)
+      report_fatal_error(toString(Cycles.takeError()));
+    outs() << "cycles = " << Cycles.get() << "\n";
+
+    Printer.printReport(outs());
+
 #if 0
-
-    if (!runPipeline(*P))
-      return 1;
-
-    Printer.printReport(TOF->os());
 
     // Clear the InstrBuilder internal state in preparation for another round.
     IB.clear();
