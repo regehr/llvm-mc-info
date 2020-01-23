@@ -284,11 +284,8 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
 
     Printer.printReport(outs());
 
-#if 0
-
     // Clear the InstrBuilder internal state in preparation for another round.
     IB.clear();
-#endif
   }
 }
 
