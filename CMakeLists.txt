@@ -13,7 +13,7 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-add_executable(mc-info mc-info.cpp CodeRegionGenerator.h CodeRegionGenerator.cpp CodeRegion.h CodeRegion.cpp PipelinePrinter.h PipelinePrinter.cpp SummaryView.h SummaryView.cpp View.cpp)
+add_executable(mc-info mc-info.cpp CodeRegionGenerator.cpp CodeRegion.cpp PipelinePrinter.cpp SummaryView.cpp View.cpp InstructionInfoView.cpp DispatchStatistics.cpp BottleneckAnalysis.cpp)
 
 set_property(TARGET mc-info PROPERTY CXX_STANDARD 17)
 

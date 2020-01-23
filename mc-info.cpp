@@ -239,23 +239,25 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
     auto P = MCA.createDefaultPipeline(PO, S);
     mca::PipelinePrinter Printer(*P);
 
+    // FIXME remove most of these
+    
     if (true)
       Printer.addView(
           std::make_unique<mca::SummaryView>(SM, Insts, 0));
 
-#if 0
-
-    if (EnableBottleneckAnalysis) {
+    if (true) {
       Printer.addView(std::make_unique<mca::BottleneckAnalysis>(
           *STI, *IP, Insts, S.getNumIterations()));
     }
 
-    if (PrintInstructionInfoView)
+    if (true)
       Printer.addView(std::make_unique<mca::InstructionInfoView>(
-          *STI, *MCII, CE, ShowEncoding, Insts, *IP));
+          *STI, *MCII, CE, true, Insts, *IP));
 
-    if (PrintDispatchStats)
+    if (true)
       Printer.addView(std::make_unique<mca::DispatchStatistics>());
+
+#if 0
 
     if (PrintSchedulerStats)
       Printer.addView(std::make_unique<mca::SchedulerStatistics>(*STI));
