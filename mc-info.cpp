@@ -115,21 +115,25 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
   return Asm;
 }
 
-//auto Trip = sys::getDefaultTargetTriple();
+#if 0
+std::string Trip = "x86_64";
+std::string CPU = "skylake";
+#else
 std::string Trip = "aarch64";
+std::string CPU = "apple-a12";
+#endif
 
 // heavily adapted from llvm-mca.cpp
 void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   Triple TheTriple(Trip);
   auto TripleName = Triple::normalize(Trip);
-  auto MCPU = llvm::sys::getHostCPUName();
 
   auto BufferPtr = MemoryBuffer::getMemBufferCopy(Asm);
   
   std::unique_ptr<MCSubtargetInfo> STI(
-      TM->getTarget().createMCSubtargetInfo(TripleName, MCPU, ""));
+      TM->getTarget().createMCSubtargetInfo(TripleName, CPU, ""));
 
-  if (!STI->isCPUStringValid(MCPU))
+  if (!STI->isCPUStringValid(CPU))
     report_fatal_error("invalid CPU string");
 
   if (!STI->getSchedModel().hasInstrSchedModel())
