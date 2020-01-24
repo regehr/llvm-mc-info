@@ -116,7 +116,7 @@ SmallString<256> makeAssembly(Module *M, TargetMachine *TM) {
 }
 
 //auto Trip = sys::getDefaultTargetTriple();
-std::string Trip = "ppc-apple-darwin";
+std::string Trip = "aarch64";
 
 // heavily adapted from llvm-mca.cpp
 void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
