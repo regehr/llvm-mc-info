@@ -1,6 +1,6 @@
 # adapted a bit from http://llvm.org/docs/CMake.html#embedding-llvm-in-your-project
 
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.8)
 project(MCInfo)
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -17,6 +17,6 @@ add_executable(mc-info mc-info.cpp CodeRegionGenerator.cpp CodeRegion.cpp Pipeli
 
 set_property(TARGET mc-info PROPERTY CXX_STANDARD 17)
 
-llvm_map_components_to_libnames(llvm_libs analysis asmparser asmprinter bitreader bitwriter codegen core coroutines debuginfodwarf executionengine instrumentation interpreter ipo irreader linker mc mcjit objcarcopts option profiledata scalaropts support target X86AsmParser X86CodeGen MCA)
+llvm_map_components_to_libnames(llvm_libs analysis asmparser asmprinter bitreader bitwriter codegen core coroutines debuginfodwarf executionengine instrumentation interpreter ipo irreader linker mc mcjit objcarcopts option profiledata scalaropts support target X86AsmParser X86CodeGen MCA XCoreCodeGen XCoreDisassembler WebAssemblyDisassembler WebAssemblyAsmParser WebAssemblyCodeGen SystemZAsmParser SystemZDisassembler SystemZCodeGen SparcCodeGen)
 
 target_link_libraries(mc-info ${llvm_libs})
