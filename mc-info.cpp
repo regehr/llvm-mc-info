@@ -246,7 +246,7 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
     auto P = MCA.createDefaultPipeline(PO, S);
     mca::PipelinePrinter Printer(*P);
 
-    // FIXME remove most of these
+#if 0
     
     if (true)
       Printer.addView(
@@ -284,6 +284,8 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
           80));
     }
 
+#endif
+    
     Expected<unsigned> Cycles = P->run();
     if (!Cycles)
       report_fatal_error(toString(Cycles.takeError()));
