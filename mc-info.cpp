@@ -1,9 +1,9 @@
+#include "BottleneckAnalysis.h"
 #include "CodeRegion.h"
 #include "CodeRegionGenerator.h"
-#include "PipelinePrinter.h"
-#include "BottleneckAnalysis.h"
 #include "DispatchStatistics.h"
 #include "InstructionInfoView.h"
+#include "PipelinePrinter.h"
 #include "RegisterFileStatistics.h"
 #include "ResourcePressureView.h"
 #include "RetireControlUnitStatistics.h"
@@ -12,23 +12,19 @@
 #include "TimelineView.h"
 
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/Object/ObjectFile.h"
-#include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/SmallVectorMemoryBuffer.h"
-#include "llvm/Support/TargetRegistry.h"
-#include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetOptions.h"
-
-// fixme remove unneeded ones
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -49,18 +45,29 @@
 #include "llvm/MCA/Stages/EntryStage.h"
 #include "llvm/MCA/Stages/InstructionTables.h"
 #include "llvm/MCA/Support.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Passes/PassBuilder.h"
+//#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/PrettyStackTrace.h"
+#include "llvm/Support/Signals.h"
+#include "llvm/Support/SmallVectorMemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/WithColor.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Utils/Cloning.h"
 
 #include <memory>
 #include <utility>
@@ -85,7 +92,7 @@ long getCodeSize(Module *M, TargetMachine *TM) {
   auto ObjOrErr = object::ObjectFile::createObjectFile(Buf);
   if (!ObjOrErr)
     report_fatal_error("createObjectFile() failed");
-  object::ObjectFile *OF = ObjOrErr.get().get();  
+  object::ObjectFile *OF = ObjOrErr.get().get();
   auto SecList = OF->sections();
   long Size = 0;
   for (auto &S : SecList) {
@@ -129,7 +136,7 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   auto TripleName = Triple::normalize(Trip);
 
   auto BufferPtr = MemoryBuffer::getMemBufferCopy(Asm);
-  
+
   std::unique_ptr<MCSubtargetInfo> STI(
       TM->getTarget().createMCSubtargetInfo(TripleName, CPU, ""));
 
@@ -139,14 +146,15 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   if (!STI->getSchedModel().hasInstrSchedModel())
     report_fatal_error("unable to find scheduling model");
 
-  std::unique_ptr<MCRegisterInfo> MRI(TM->getTarget().createMCRegInfo(TripleName));
+  std::unique_ptr<MCRegisterInfo> MRI(
+      TM->getTarget().createMCRegInfo(TripleName));
   if (!MRI)
     report_fatal_error("Unable to create target register info!");
 
   MCTargetOptions MCOptions = InitMCTargetOptionsFromFlags();
 
   std::unique_ptr<MCAsmInfo> MAI(
-    TM->getTarget().createMCAsmInfo(*MRI, TripleName, MCOptions));
+      TM->getTarget().createMCAsmInfo(*MRI, TripleName, MCOptions));
   if (!MAI)
     report_fatal_error("Unable to create target asm info!");
 
@@ -166,7 +174,8 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
   std::unique_ptr<MCInstrAnalysis> MCIA(
       TM->getTarget().createMCInstrAnalysis(MCII.get()));
 
-  mca::AsmCodeRegionGenerator CRG(TM->getTarget(), SrcMgr, Ctx, *MAI, *STI, *MCII);
+  mca::AsmCodeRegionGenerator CRG(TM->getTarget(), SrcMgr, Ctx, *MAI, *STI,
+                                  *MCII);
 
   // Parse the input and create CodeRegions that llvm-mca can analyze.
   Expected<const mca::CodeRegions &> RegionsOrErr = CRG.parseCodeRegions();
@@ -208,15 +217,15 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
       *STI, *MRI, InitMCTargetOptionsFromFlags()));
 
   int Count = 0;
-  
+
   for (const std::unique_ptr<mca::CodeRegion> &Region : Regions) {
-  
+
     // Skip empty code regions
     if (Region->empty())
       continue;
 
     outs() << "non-empty region " << Count++ << "\n";
-  
+
     // Don't print the header of this region if it is the default region, and
     // it doesn't have an end location.
     if (Region->startLoc().isValid() || Region->endLoc().isValid()) {
@@ -285,7 +294,7 @@ void mcaInfo(SmallString<256> Asm, TargetMachine *TM) {
     }
 
 #endif
-    
+
     Expected<unsigned> Cycles = P->run();
     if (!Cycles)
       report_fatal_error(toString(Cycles.takeError()));
@@ -305,9 +314,9 @@ int getInfo(Module *M, TargetMachine *TM) {
 
   long Size = getCodeSize(M, TM);
   outs() << "code size = " << Size << " bytes\n";
-  
+
   auto Asm = makeAssembly(M, TM);
-  //outs() << Asm;
+  // outs() << Asm;
   mcaInfo(Asm, TM);
 
   return 0;
@@ -320,6 +329,22 @@ struct BinOp {
   bool nsw, nuw, exact;
 };
 
+void optimizeModule(llvm::Module *M) {
+  auto FPM = new legacy::FunctionPassManager(M);
+  PassManagerBuilder PB;
+  PB.OptLevel = 2;
+  PB.SizeLevel = 0;
+  // PB.populateFunctionPassManager(*FPM);
+  PB.populateModulePassManager(*FPM);
+  FPM->doInitialization();
+  for (Function &F : *M) {
+    outs() << "optimizing " << F.getName() << "\n";
+    FPM->run(F);
+  }
+  FPM->doFinalization();
+  delete FPM;
+}
+
 void test(const BinOp &Op, TargetMachine *TM) {
   LLVMContext C;
   IRBuilder<> B(C);
@@ -329,7 +354,8 @@ void test(const BinOp &Op, TargetMachine *TM) {
 
   std::vector<Type *> T(2, Type::getIntNTy(C, W));
   FunctionType *FT = FunctionType::get(Type::getIntNTy(C, W), T, false);
-  Function *F = Function::Create(FT, Function::ExternalLinkage, "test", M.get());
+  Function *F =
+      Function::Create(FT, Function::ExternalLinkage, "test", M.get());
   BasicBlock *BB = BasicBlock::Create(C, "", F);
   B.SetInsertPoint(BB);
   std::vector<Argument *> Args;
@@ -353,38 +379,40 @@ void test(const BinOp &Op, TargetMachine *TM) {
   if (verifyModule(*M))
     report_fatal_error("verifyModule");
 
+  optimizeModule(M.get());
+
   getInfo(M.get(), TM);
 }
 
-std::vector<BinOp> Ops {
-  { Instruction::Add, false, false, false },
-  { Instruction::Add, true, false, false },
-  { Instruction::Add, false, true, false },
-  { Instruction::Add, true, true, false },
-  { Instruction::Sub, false, false, false },
-  { Instruction::Sub, true, false, false },
-  { Instruction::Sub, false, true, false },
-  { Instruction::Sub, true, true, false },
-  { Instruction::Mul, false, false, false },
-  { Instruction::Mul, true, false, false },
-  { Instruction::Mul, false, true, false },
-  { Instruction::Mul, true, true, false },
-  { Instruction::UDiv, false, false, false },
-  { Instruction::UDiv, false, false, true },
-  { Instruction::SDiv, false, false, false },
-  { Instruction::SDiv, false, false, true },
-  { Instruction::URem, false, false, false },
-  { Instruction::SRem, false, false, false },
-  { Instruction::Shl, false, false, false },
-  { Instruction::LShr, false, false, false },
-  { Instruction::LShr, false, false, true },
-  { Instruction::AShr, false, false, false },
-  { Instruction::AShr, false, false, true },
-  { Instruction::And, false, false, false },
-  { Instruction::Or, false, false, false },
-  { Instruction::Xor, false, false, false },
+std::vector<BinOp> Ops{
+    {Instruction::Add, false, false, false},
+    {Instruction::Add, true, false, false},
+    {Instruction::Add, false, true, false},
+    {Instruction::Add, true, true, false},
+    {Instruction::Sub, false, false, false},
+    {Instruction::Sub, true, false, false},
+    {Instruction::Sub, false, true, false},
+    {Instruction::Sub, true, true, false},
+    {Instruction::Mul, false, false, false},
+    {Instruction::Mul, true, false, false},
+    {Instruction::Mul, false, true, false},
+    {Instruction::Mul, true, true, false},
+    {Instruction::UDiv, false, false, false},
+    {Instruction::UDiv, false, false, true},
+    {Instruction::SDiv, false, false, false},
+    {Instruction::SDiv, false, false, true},
+    {Instruction::URem, false, false, false},
+    {Instruction::SRem, false, false, false},
+    {Instruction::Shl, false, false, false},
+    {Instruction::LShr, false, false, false},
+    {Instruction::LShr, false, false, true},
+    {Instruction::AShr, false, false, false},
+    {Instruction::AShr, false, false, true},
+    {Instruction::And, false, false, false},
+    {Instruction::Or, false, false, false},
+    {Instruction::Xor, false, false, false},
 };
-  
+
 } // namespace
 
 int main(int argc, char **argv) {
